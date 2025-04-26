@@ -24,19 +24,18 @@ The `init` command, using default paths, will create the following structure in 
 src/
 └── server/
     ├── api/
-    │   ├── generated/       # Generated API routes (by 'generate' command)
-    │   │   ├── user.ts        # Example generated tRPC router
-    │   │   ├── post.ts        # Example generated tRPC router
-    │   │   └── index.ts       # Exports all generated routers
-    │   └── util/
-    │       └── getMany.ts       # Default utility function (by 'init' command)
+    │   └── generated/       # Generated API routes (by 'generate' command)
+    │       ├── user.ts        # Example generated tRPC router
+    │       ├── post.ts        # Example generated tRPC router
+    │       └── index.ts       # Exports all generated routers
     └── db/
-        ├── connection.ts      # Mongoose connection setup (by 'init' command)
+        ├── connection.ts      # Mongoose connection setup (by 'init')
         ├── schema.ts          # Zod schema definitions (Edit this file!)
-        └── schemaDerived.ts   # Generated types, schemas, collections (Updated by 'generate')
+        ├── schemaDerived.ts   # Generated types, schemas, collections (Updated by 'generate')
+        └── util.ts            # Default utility function(s) (by 'init')
 ```
 
-- Files marked with `(by 'init' command)` are created/copied by the `init` command.
+- Files marked with `(by 'init')` are created/copied by the `init` command.
 - Files/directories marked with `(by 'generate' command)` or `(Updated by 'generate')` are created/updated by the `generate` command.
 
 ## Installation
@@ -61,13 +60,12 @@ mongo-trc init [options]
 
 **Options:**
 
-- `-o, --output-dir <path>`: Directory for **DB files** (`connection.ts`, `schema.ts`, `schemaDerived.ts`). (Default: `./src/server/db`)
-- `--util-output-dir <path>`: Directory for **utility files** (e.g., `getMany.ts`). (Default: `./src/server/api/util`)
-- `-f, --force`: Overwrite existing files if they are found in the target directories. (Default: `false`)
+- `-o, --output-dir <path>`: Directory for **DB files** (`connection.ts`, `schema.ts`, `schemaDerived.ts`, `util.ts`). (Default: `./src/server/db`)
+- `-f, --force`: Overwrite existing files. (Default: `false`)
 
 ### `generate`
 
-Generates tRPC API route files (e.g., `user.ts`, `post.ts`) in the specified output directory and updates the `schemaDerived.ts` file based on the Zod schemas defined in `schema.ts`.
+Generates tRPC API route files and updates the `schemaDerived.ts` file.
 
 ```bash
 mongo-trc generate [options]
@@ -75,17 +73,14 @@ mongo-trc generate [options]
 
 **Options:**
 
-- `--schema-path <path>`: Path to the Zod **schema definition file** (`schema.ts`) to read from. (Default: `./src/server/db/schema.ts`)
-- `--derived-path <path>`: Path to the **derived schema file** (`schemaDerived.ts`) to read from and update. (Default: `./src/server/db/schemaDerived.ts`)
-- `-o, --output-dir <path>`: Output directory for the **generated API route files** (e.g., `user.ts`, `post.ts`, `index.ts`). (Default: `./src/server/api/generated`)
-- `--trpc-path <path>`: Path to your **tRPC helper file** (usually `trpc.ts`), used for import paths in generated files. (Default: `./src/server/api/trpc.ts`)
-- `--util-path <path>`: Path to the **directory containing the `getMany.ts` utility**, used for import paths in generated files. (Default: `./src/server/api/util`)
+- `--schema-path <path>`: Path to the Zod **schema definition file** (`schema.ts`). (Default: `./src/server/db/schema.ts`)
+- `--derived-path <path>`: Path to the **derived schema file** (`schemaDerived.ts`). (Default: `./src/server/db/schemaDerived.ts`)
+- `-o, --output-dir <path>`: Output directory for the **generated API route files**. (Default: `./src/server/api/generated`)
+- `--trpc-path <path>`: Path to your **tRPC helper file** (`trpc.ts`). (Default: `./src/server/api/trpc.ts`)
 
 ### `watch`
 
-Watches the specified schema file (`--schema-path`) for changes and automatically triggers the `generate` command with the provided options.
-
-This is useful during development to keep your derived types and API routes in sync with your schema definitions without manually running `generate` each time.
+Watches the schema file for changes and automatically runs `generate`.
 
 ```bash
 mongo-trc watch [options]
@@ -93,7 +88,7 @@ mongo-trc watch [options]
 
 **Options:**
 
-- Uses the same options as the `generate` command to configure the generation process (`--schema-path`, `--derived-path`, `-o`, `--trpc-path`, `--util-path`).
+- Uses the same options as the `generate` command (`--schema-path`, `--derived-path`, `-o`, `--trpc-path`).
 
 Press `Ctrl+C` to stop the watcher.
 

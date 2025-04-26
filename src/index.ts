@@ -5,7 +5,7 @@ import fsExtra from 'fs-extra' // Use fs-extra for directory handling
 import * as path from 'path'
 import { fileURLToPath } from 'url' // Needed for __dirname in NodeNext/ESM
 import ora from 'ora' // Import ora
-import { updateSchemaDerivedFile, generateApiFiles } from './utils/fileUpdater.js'
+import { updateSchemaDerivedFile, generateApiFiles, getRelativeImportPath } from './utils/fileUpdater.js'
 import { parseSchemaNames } from './utils/schemaParser.js'
 import chokidar from 'chokidar' // Import chokidar
 
@@ -26,18 +26,12 @@ async function getCliVersion(): Promise<string> {
 }
 
 // --- Helper Function for Generate Logic ---
-async function runGenerateLogic(options: {
-  schemaPath: string
-  derivedPath: string
-  outputDir: string
-  trpcPath: string
-  utilPath: string
-}) {
+async function runGenerateLogic(options: { schemaPath: string; derivedPath: string; outputDir: string; trpcPath: string }) {
   const schemaPath = path.resolve(process.cwd(), options.schemaPath)
   const derivedPath = path.resolve(process.cwd(), options.derivedPath)
   const outputDir = path.resolve(process.cwd(), options.outputDir)
   const trpcPath = path.resolve(process.cwd(), options.trpcPath)
-  const utilPath = path.resolve(process.cwd(), options.utilPath)
+  const utilPath = path.join(path.dirname(derivedPath), 'util.ts')
   const templateBaseDir = path.resolve(__dirname, '../templates')
 
   const generateSpinner = ora('Starting code generation...').start()
@@ -45,7 +39,7 @@ async function runGenerateLogic(options: {
   generateSpinner.info(`Derived file: ${path.relative(process.cwd(), derivedPath)}`)
   generateSpinner.info(`API output directory: ${path.relative(process.cwd(), outputDir)}`)
   generateSpinner.info(`tRPC helper path: ${path.relative(process.cwd(), trpcPath)}`)
-  generateSpinner.info(`Util directory path: ${path.relative(process.cwd(), utilPath)}`)
+  generateSpinner.info(`Util file path (derived): ${path.relative(process.cwd(), utilPath)}`)
 
   try {
     // 1. Parse Schema File
@@ -95,71 +89,48 @@ program
   .command('init')
   .description('Initialize project with default DB and utility files.')
   .option('-o, --output-dir <path>', 'Output directory for DB files', './src/server/db')
-  .option('--util-output-dir <path>', 'Output directory for utility files', './src/server/api/util')
   .option('-f, --force', 'Overwrite existing files', false)
   .action(async (options) => {
     const dbOutputDir = path.resolve(process.cwd(), options.outputDir)
-    const utilOutputDir = path.resolve(process.cwd(), options.utilOutputDir)
     const dbTemplateDir = path.resolve(__dirname, '../templates/db')
-    const utilTemplateDir = path.resolve(__dirname, '../templates/util')
     const forceOverwrite = options.force
-
     const initSpinner = ora('Initializing project files...').start()
-    initSpinner.text = `DB files in: ${dbOutputDir}`
-    initSpinner.text = `Utility files in: ${utilOutputDir}`
-    if (forceOverwrite) {
-      initSpinner.text = '(--force specified, existing files will be overwritten)'
-    }
 
     try {
       await fsExtra.ensureDir(dbOutputDir)
-      await fsExtra.ensureDir(utilOutputDir)
 
-      // --- Copy DB Files ---
-      initSpinner.text = 'Copying DB templates...'
-      const dbFilesToCopy = ['connection.ts', 'schema.ts', 'schemaDerived.ts']
-      let dbFilesExist = false
-      if (!forceOverwrite) {
-        for (const file of dbFilesToCopy) {
-          if (await fsExtra.pathExists(path.join(dbOutputDir, file))) {
-            dbFilesExist = true
-            initSpinner.warn(`    Warning: DB File ${file} already exists.`)
+      // --- Process DB Templates (including util.ts now) ---
+      initSpinner.text = 'Processing DB templates...'
+      const dbFilesToProcess = ['connection.ts', 'schema.ts', 'schemaDerived.ts', 'util.ts']
+      const derivedSchemaTargetPath = path.join(dbOutputDir, 'schemaDerived.ts')
+
+      for (const dbFile of dbFilesToProcess) {
+        const templatePath = path.join(dbTemplateDir, dbFile)
+        const targetPath = path.join(dbOutputDir, dbFile)
+        let fileExists = false
+
+        if (!(await fsExtra.pathExists(templatePath))) {
+          initSpinner.fail(`❌ Error: DB Template file not found at ${templatePath}.`)
+          continue
+        }
+
+        if (!fileExists || forceOverwrite) {
+          if (dbFile === 'util.ts') {
+            const templateContent = await fsExtra.readFile(templatePath, 'utf-8')
+            const relativePath = getRelativeImportPath(targetPath, derivedSchemaTargetPath)
+            const processedContent = templateContent.replace('%%RELATIVE_PATH_TO_DERIVED%%', relativePath + '.js')
+            await fsExtra.writeFile(targetPath, processedContent, 'utf-8')
+            initSpinner.info(`    Processed and wrote ${dbFile}`)
+          } else {
+            await fsExtra.copy(templatePath, targetPath)
+            initSpinner.info(`    Copied ${dbFile}`)
           }
+        } else {
+          initSpinner.info(`    Skipping ${dbFile} (exists and --force not used).`)
         }
-      }
-      if (!dbFilesExist || forceOverwrite) {
-        if (!(await fsExtra.pathExists(dbTemplateDir))) {
-          initSpinner.fail(`❌ Error: DB Template directory not found at ${dbTemplateDir}.`)
-          process.exit(1)
-        }
-        await fsExtra.copy(dbTemplateDir, dbOutputDir)
-      } else {
-        initSpinner.info('Skipping DB file copy (files exist and --force not used).')
       }
 
-      // --- Copy Util Files ---
-      initSpinner.text = 'Copying Utility templates...'
-      const utilFilesToCopy = ['getMany.ts'] // Add other util files here
-      let utilFilesExist = false
-      if (!forceOverwrite) {
-        for (const file of utilFilesToCopy) {
-          if (await fsExtra.pathExists(path.join(utilOutputDir, file))) {
-            utilFilesExist = true
-            initSpinner.warn(`    Warning: Utility File ${file} already exists.`)
-          }
-        }
-      }
-      if (!utilFilesExist || forceOverwrite) {
-        if (!(await fsExtra.pathExists(utilTemplateDir))) {
-          initSpinner.fail(`❌ Error: Util Template directory not found at ${utilTemplateDir}.`)
-          process.exit(1)
-        }
-        await fsExtra.copy(utilTemplateDir, utilOutputDir)
-      } else {
-        initSpinner.info('Skipping Utility file copy (files exist and --force not used).')
-      }
-
-      initSpinner.succeed('Initialization complete! Review copied files.')
+      initSpinner.succeed('Initialization complete! Review copied/processed files.')
     } catch (error: any) {
       initSpinner.fail('Error initializing project files:')
       console.error(error.message || error)
@@ -167,7 +138,7 @@ program
     }
   })
 
-// --- generate command (uses helper function) ---
+// --- generate command ---
 program
   .command('generate')
   .description('Generate API files and update schemaDerived based on schema.ts.')
@@ -175,9 +146,7 @@ program
   .option('--derived-path <path>', 'Path to the derived schema and types file', './src/server/db/schemaDerived.ts')
   .option('-o, --output-dir <path>', 'Output directory for generated API files', './src/server/api/generated')
   .option('--trpc-path <path>', 'Path to the tRPC helper file (trpc.ts)', './src/server/api/trpc.ts')
-  .option('--util-path <path>', 'Path to the directory containing getMany utility', './src/server/api/util')
   .action(async (options) => {
-    // Directly call the extracted logic function
     await runGenerateLogic(options)
   })
 
@@ -190,7 +159,6 @@ program
   .option('--derived-path <path>', 'Path to the derived schema and types file', './src/server/db/schemaDerived.ts')
   .option('-o, --output-dir <path>', 'Output directory for generated API files', './src/server/api/generated')
   .option('--trpc-path <path>', 'Path to the tRPC helper file (trpc.ts)', './src/server/api/trpc.ts')
-  .option('--util-path <path>', 'Path to the directory containing getMany utility', './src/server/api/util')
   .action(async (options) => {
     const watchPath = path.resolve(process.cwd(), options.schemaPath)
     console.log(`👀 Watching for changes in: ${watchPath}`)

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 // Adjust these import paths based on your project structure
 import { createTRPCRouter, protectedProcedure, publicProcedure } from '%%RELATIVE_PATH_TO_TRPC%%';
+// Path to util.ts (in db dir) will be calculated
 import { getMany } from '%%RELATIVE_PATH_TO_UTIL%%'; 
 // Separate value and type imports
 import {

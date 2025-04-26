@@ -1,7 +1,6 @@
 import type { Model, Document, FilterQuery } from 'mongoose'
 import type { z } from 'zod'
-// Adjust import path relative to the default location (src/server/api/util)
-import { getManySchema } from '../db/schemaDerived.js'
+import { getManySchema } from './schemaDerived.js'
 
 type GetManyResult<T> = {
   data: T[]
