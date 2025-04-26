@@ -1,0 +1,124 @@
+// Placeholder for API logic for %%PASCAL_CASE_SCHEMA_NAME%%
+// Typically, you would import your TRPC router or Express app instance here
+// and define routes that use the imported schemas and collections.
+
+import { z } from 'zod';
+// Adjust these import paths based on your project structure
+import { createTRPCRouter, protectedProcedure, publicProcedure } from '%%RELATIVE_PATH_TO_TRPC%%';
+import { getMany } from '%%RELATIVE_PATH_TO_UTIL%%'; 
+import {
+  collections,
+  deleteSchema,
+  getManySchema,
+  getOneSchema,
+  %%PASCAL_CASE_SCHEMA_NAME%%,
+  %%PASCAL_CASE_SCHEMA_NAME%%CreateSchema,
+  %%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema,
+} from '%%RELATIVE_PATH_TO_DERIVED%%';
+
+export const %%SCHEMA_NAME%%Router = createTRPCRouter({
+  getMany: publicProcedure.input(getManySchema).query(async ({ input, ctx }) => {
+    // Assuming ctx.db holds the collections object or similar DB access
+    // Adjust ctx.db.%%SCHEMA_NAME%% if your context structure is different
+    const res = await getMany<%%PASCAL_CASE_SCHEMA_NAME%%>(collections.%%SCHEMA_NAME%%, input);
+    return res;
+  }),
+  getOne: publicProcedure.input(getOneSchema).query(async ({ input, ctx }) => {
+    const res = await collections.%%SCHEMA_NAME%%
+      .findOne({ _id: input._id })
+      .select(input.select ?? [])
+      .populate(input.populate ?? []) // Make sure populate is handled correctly
+      .lean()
+      .exec();
+    return res;
+  }),
+  create: protectedProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%CreateSchema).mutation(async ({ input, ctx }) => {
+    const res = await collections.%%SCHEMA_NAME%%.create(input);
+    return res;
+  }),
+  update: protectedProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema.extend({ _id: z.string() })).mutation(async ({ input, ctx }) => {
+    // Note: Update requires _id in input for this structure
+    const { _id, ...updateData } = input;
+    const res = await collections.%%SCHEMA_NAME%%.findByIdAndUpdate(_id, updateData, { new: true }).lean();
+    // findByIdAndUpdate returns the updated document by default with {new: true}
+    return res;
+  }),
+  delete: protectedProcedure.input(deleteSchema).mutation(async ({ input, ctx }) => {
+    const res = await collections.%%SCHEMA_NAME%%.deleteOne({ _id: input._id }).exec();
+    // deleteOne returns { acknowledged: boolean, deletedCount: number }
+    return res;
+  }),
+});
+
+// --- Example CRUD Function Stubs --- 
+// Replace these with your actual API framework implementation (e.g., tRPC procedures, Express routes)
+
+export async function get%%PASCAL_CASE_SCHEMA_NAME%%(id: string): Promise<%%PASCAL_CASE_SCHEMA_NAME%% | null> {
+  // const validatedId = getOneSchema.parse({ _id: id }); // Example validation
+  console.log(`[API Stub] Getting %%SCHEMA_NAME%% with id: ${id}`);
+  // const item = await collections.%%SCHEMA_NAME%%.findById(id).lean();
+  // return item as %%PASCAL_CASE_SCHEMA_NAME%% | null;
+  return null; // Placeholder
+}
+
+export async function getMany%%PASCAL_CASE_SCHEMA_NAME%%s(query: z.infer<typeof getManySchema>): Promise<%%PASCAL_CASE_SCHEMA_NAME%%[]> {
+  // const validatedQuery = getManySchema.parse(query); // Example validation
+  console.log(`[API Stub] Getting many %%SCHEMA_NAME%%s with query:`, query);
+  // const items = await collections.%%SCHEMA_NAME%%
+  //   .find(/* validatedQuery.where */)
+  //   .limit(validatedQuery.limit)
+  //   .skip(validatedQuery.skip)
+  //   .sort({ [validatedQuery.sortBy]: validatedQuery.sort })
+  //   .lean();
+  // return items as %%PASCAL_CASE_SCHEMA_NAME%%[];
+  return []; // Placeholder
+}
+
+export async function create%%PASCAL_CASE_SCHEMA_NAME%%(data: z.infer<typeof %%PASCAL_CASE_SCHEMA_NAME%%CreateSchema>): Promise<%%PASCAL_CASE_SCHEMA_NAME%%> {
+  // const validatedData = %%PASCAL_CASE_SCHEMA_NAME%%CreateSchema.parse(data); // Example validation
+  console.log(`[API Stub] Creating %%SCHEMA_NAME%% with data:`, data);
+  // const newItem = await collections.%%SCHEMA_NAME%%.create(validatedData);
+  // return newItem.toObject() as %%PASCAL_CASE_SCHEMA_NAME%%;
+  throw new Error('Not implemented'); // Placeholder
+}
+
+export async function update%%PASCAL_CASE_SCHEMA_NAME%%(id: string, data: z.infer<typeof %%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema>): Promise<%%PASCAL_CASE_SCHEMA_NAME%% | null> {
+  // const validatedId = getOneSchema.parse({ _id: id }); // Example validation
+  // const validatedData = %%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema.parse(data); // Example validation
+  console.log(`[API Stub] Updating %%SCHEMA_NAME%% ${id} with data:`, data);
+  // const updatedItem = await collections.%%SCHEMA_NAME%%.findByIdAndUpdate(id, validatedData, { new: true }).lean();
+  // return updatedItem as %%PASCAL_CASE_SCHEMA_NAME%% | null;
+  return null; // Placeholder
+}
+
+export async function delete%%PASCAL_CASE_SCHEMA_NAME%%(id: string): Promise<{ success: boolean }> {
+  // const validatedId = deleteSchema.parse({ _id: id }); // Example validation
+  console.log(`[API Stub] Deleting %%SCHEMA_NAME%% with id: ${id}`);
+  // const result = await collections.%%SCHEMA_NAME%%.deleteOne({ _id: id });
+  // return { success: result.deletedCount === 1 };
+  return { success: false }; // Placeholder
+}
+
+// If using tRPC, you might export a router like this:
+/*
+import { createTRPCRouter, publicProcedure } from "../trpc"; // Adjust import
+
+export const %%SCHEMA_NAME%%Router = createTRPCRouter({
+  getOne: publicProcedure.input(getOneSchema).query(({ input }) => {
+    return get%%PASCAL_CASE_SCHEMA_NAME%%(input._id);
+  }),
+  getMany: publicProcedure.input(getManySchema).query(({ input }) => {
+    return getMany%%PASCAL_CASE_SCHEMA_NAME%%s(input);
+  }),
+  create: publicProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%CreateSchema).mutation(({ input }) => {
+    return create%%PASCAL_CASE_SCHEMA_NAME%%(input);
+  }),
+  update: publicProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema.extend({ _id: z.string() })).mutation(({ input }) => {
+    const { _id, ...data } = input;
+    return update%%PASCAL_CASE_SCHEMA_NAME%%(_id, data);
+  }),
+  delete: publicProcedure.input(deleteSchema).mutation(({ input }) => {
+    return delete%%PASCAL_CASE_SCHEMA_NAME%%(input._id);
+  }),
+});
+*/ 

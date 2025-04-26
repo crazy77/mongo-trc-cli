@@ -1,0 +1,231 @@
+import * as path from 'path'
+import fsExtra from 'fs-extra'
+import { z } from 'zod'
+
+/**
+ * Capitalizes the first letter of a string.
+ */
+function capitalizeFirstLetter(string: string): string {
+  return string.charAt(0).toUpperCase() + string.slice(1)
+}
+
+/**
+ * Calculates the relative path from one file path to another.
+ * Ensures the path uses forward slashes and starts with ./ or ../
+ */
+function getRelativeImportPath(fromPath: string, toPath: string): string {
+  let relativePath = path.relative(path.dirname(fromPath), toPath)
+  relativePath = relativePath.replace(/\.(ts|js)$/, '')
+  if (!relativePath.startsWith('.')) {
+    relativePath = './' + relativePath
+  }
+  return relativePath.replace(/\\/g, '/')
+}
+
+/**
+ * Updates the content of the schemaDerived.ts file.
+ * @param derivedPath Path to the schemaDerived.ts file.
+ * @param schemaPath Path to the schema.ts file.
+ * @param schemaNames Array of schema names parsed from schema.ts.
+ */
+export async function updateSchemaDerivedFile(derivedPath: string, schemaPath: string, schemaNames: string[]): Promise<void> {
+  console.log('  [Updater] Reading derived file content...')
+  let content = await fsExtra.readFile(derivedPath, 'utf-8')
+
+  content = updateSchemaImports(content, derivedPath, schemaPath, schemaNames)
+  content = updateCollections(content, schemaNames)
+  content = updateGeneratedTypes(content, schemaNames)
+  content = updatePopulateData(content, schemaNames)
+
+  // --- Write Updated Content ---
+  console.log('  [Updater] Writing updated content to file...')
+  await fsExtra.writeFile(derivedPath, content, 'utf-8')
+  console.log('  [Updater] File write complete.')
+}
+
+/**
+ * Generates API files based on templates and schema names.
+ * @param outputDir Directory where the generated API files will be placed.
+ * @param derivedPath Path to the schemaDerived.ts file.
+ * @param trpcPath Path to the tRPC helper file (e.g., src/server/api/trpc.ts).
+ * @param utilPath Path to the utility file directory (e.g., src/server/api/util).
+ * @param templateDir Directory containing the template files.
+ * @param schemaNames Array of schema names.
+ */
+export async function generateApiFiles(
+  outputDir: string,
+  derivedPath: string,
+  trpcPath: string,
+  utilPath: string,
+  templateDir: string,
+  schemaNames: string[],
+): Promise<void> {
+  await fsExtra.ensureDir(outputDir)
+
+  const modelTemplatePath = path.join(templateDir, 'model.ts.template')
+  const indexTemplatePath = path.join(templateDir, 'index.ts.template')
+
+  if (!(await fsExtra.pathExists(modelTemplatePath)) || !(await fsExtra.pathExists(indexTemplatePath))) {
+    console.error(`❌ Error: Template files not found in ${templateDir}. Check CLI installation.`)
+    process.exit(1)
+  }
+
+  const modelTemplateContent = await fsExtra.readFile(modelTemplatePath, 'utf-8')
+  const indexTemplateContent = await fsExtra.readFile(indexTemplatePath, 'utf-8')
+
+  const generatedFiles: string[] = []
+
+  for (const schemaName of schemaNames) {
+    const pascalCaseSchemaName = capitalizeFirstLetter(schemaName)
+    const targetFilePath = path.join(outputDir, `${schemaName}.ts`)
+
+    const relativePathToDerived = getRelativeImportPath(targetFilePath, derivedPath)
+    const relativePathToTrpc = getRelativeImportPath(targetFilePath, trpcPath)
+    const getManyUtilPath = path.join(utilPath, 'getMany.ts')
+    const relativePathToUtil = getRelativeImportPath(targetFilePath, getManyUtilPath)
+
+    let processedContent = modelTemplateContent
+      .replace(/%%SCHEMA_NAME%%/g, schemaName)
+      .replace(/%%PASCAL_CASE_SCHEMA_NAME%%/g, pascalCaseSchemaName)
+      .replace(/%%RELATIVE_PATH_TO_DERIVED%%/g, relativePathToDerived)
+      .replace(/%%RELATIVE_PATH_TO_TRPC%%/g, relativePathToTrpc)
+      .replace(/%%RELATIVE_PATH_TO_UTIL%%/g, relativePathToUtil)
+
+    await fsExtra.writeFile(targetFilePath, processedContent, 'utf-8')
+    generatedFiles.push(schemaName)
+  }
+
+  const exportStatements = generatedFiles.map((name) => `export * from './${name}.js';`).join('\n')
+
+  const indexContent = indexTemplateContent.replace('%%EXPORT_STATEMENTS%%', exportStatements)
+  const indexTargetPath = path.join(outputDir, 'index.ts')
+  await fsExtra.writeFile(indexTargetPath, indexContent, 'utf-8')
+}
+
+// --- Update Logic for schemaDerived.ts ---
+
+// Regex definitions
+const SCHEMA_IMPORT_REGEX = /import\s+\{([^}]+)\}\s+from\s+(['"])(.*\/schema(?:\.js)?)\2/
+const LAST_IMPORT_REGEX = /(import(?:.|\n)*?;\n)/g
+const COLLECTIONS_REGEX = /(export\s+const\s+collections\s*=\s*\{)([^]*?)(\n*\};?)/
+const GENERATED_TYPES_START_MARKER = "// --- Generated Types and Schemas (will be updated by 'generate') ---"
+const GENERATED_TYPES_END_MARKER = '// --- Utility Types (optional, adjust as needed) ---'
+const POPULATE_DATA_REGEX = /(type\s+PopulateData\s*=\s*\{)([^]*?)(\n*\};?)/
+
+function updateSchemaImports(content: string, derivedPath: string, schemaPath: string, schemaNames: string[]): string {
+  console.log('  [Updater] Updating schema imports...')
+  const schemaImportPath = getRelativeImportPath(derivedPath, schemaPath)
+  const schemaImportMatch = content.match(SCHEMA_IMPORT_REGEX)
+
+  const newImportStatement = `import { ${schemaNames.join(', ')} } from '${schemaImportPath}';`
+
+  if (schemaImportMatch) {
+    console.log(`    Replacing import: ${schemaImportMatch[0]} -> ${newImportStatement}`)
+    return content.replace(SCHEMA_IMPORT_REGEX, newImportStatement)
+  } else {
+    console.warn('  [Updater] No existing schema import found. Attempting to add new one...')
+    let lastIndex = 0
+    let match
+    while ((match = LAST_IMPORT_REGEX.exec(content)) !== null) {
+      lastIndex = match.index + match[0].length
+    }
+    const importToAdd = `${newImportStatement}\n`
+    console.log(`    Added new import: ${importToAdd.trim()}`)
+    return content.slice(0, lastIndex) + importToAdd + content.slice(lastIndex)
+  }
+}
+
+function updateCollections(content: string, schemaNames: string[]): string {
+  console.log('  [Updater] Updating collections (using improved regex)...')
+  const collectionsMatch = content.match(COLLECTIONS_REGEX)
+
+  if (collectionsMatch && collectionsMatch[2] !== undefined) {
+    console.log('    Found collections block via regex.')
+    const modelDefinitions = schemaNames
+      .map((name) => {
+        const modelName = capitalizeFirstLetter(name)
+        return `  ${name}: dbInstance.model('${modelName}', zodSchema(${name}, sharedOptions)),`
+      })
+      .join('\n')
+
+    const existingContent = collectionsMatch[2]
+    const commentLine = existingContent.split('\n').find((line) => line.trim().startsWith('//'))
+    const newCollectionsContent = `\n${modelDefinitions}${commentLine ? `\n${commentLine.trim()}` : ''}\n`
+    console.log('    Collections block updated.')
+    return content.replace(COLLECTIONS_REGEX, `$1${newCollectionsContent}$3`)
+  } else {
+    console.warn('  [Updater] Could not find collections block via regex. Skipping update.')
+    return content
+  }
+}
+
+function updateGeneratedTypes(content: string, schemaNames: string[]): string {
+  console.log('  [Updater] Updating generated types and schemas...')
+  const typesStartIndex = content.indexOf(GENERATED_TYPES_START_MARKER)
+  const typesEndIndex = content.indexOf(GENERATED_TYPES_END_MARKER, typesStartIndex)
+
+  if (typesStartIndex !== -1 && typesEndIndex !== -1) {
+    console.log('    Found generated types block.')
+    const generatedTypes = schemaNames
+      .map((name) => {
+        const pascalName = capitalizeFirstLetter(name)
+        return `export type ${pascalName} = z.infer<typeof ${name}>;
+export const ${pascalName}CreateSchema = ${name}.omit({ _id: true, createdAt: true, updatedAt: true });
+export const ${pascalName}UpdateSchema = ${name}.partial().omit({ _id: true, createdAt: true, updatedAt: true });`
+      })
+      .join('\n\n')
+    console.log('    Generated types block updated.')
+    return (
+      content.substring(0, typesStartIndex + GENERATED_TYPES_START_MARKER.length) +
+      '\n\n' +
+      generatedTypes +
+      '\n\n' +
+      content.substring(typesEndIndex)
+    )
+  } else {
+    console.warn('  [Updater] Could not find generated types/schemas block markers. Skipping update.')
+    return content
+  }
+}
+
+function updatePopulateData(content: string, schemaNames: string[]): string {
+  console.log('  [Updater] Updating PopulateData type (using improved regex & parsing)...')
+  const populateDataMatch = content.match(POPULATE_DATA_REGEX)
+
+  if (populateDataMatch && populateDataMatch[2] !== undefined) {
+    console.log('    Found PopulateData block via regex.')
+    const existingPopulateContent = populateDataMatch[2]
+    const populateCommentLine = existingPopulateContent.split('\n').find((line) => line.trim().startsWith('//'))
+
+    const existingEntriesMap = new Map<string, string>()
+    const existingLines = existingPopulateContent.split('\n')
+    const entryRegex = /^\s*(\w+)\s*:\s*(\w+)\s*;/
+    existingLines.forEach((line) => {
+      const trimmedLine = line.trim()
+      if (trimmedLine && !trimmedLine.startsWith('//')) {
+        const match = trimmedLine.match(entryRegex)
+        if (match && match[1]) {
+          existingEntriesMap.set(match[1], line)
+        }
+      }
+    })
+    console.log(`    Parsed existing entries: ${Array.from(existingEntriesMap.keys()).join(', ')}`)
+
+    schemaNames.forEach((name) => {
+      if (!existingEntriesMap.has(name)) {
+        const pascalName = capitalizeFirstLetter(name)
+        const newEntryLine = `  ${name}: ${pascalName};`
+        existingEntriesMap.set(name, newEntryLine)
+        console.log(`    Adding new PopulateData entry: ${name}`)
+      }
+    })
+
+    const sortedEntries = Array.from(existingEntriesMap.values()).sort()
+    const newPopulateDataContent = `\n${sortedEntries.join('\n')}${populateCommentLine ? `\n${populateCommentLine.trim()}` : ''}\n`
+    console.log('    PopulateData type updated.')
+    return content.replace(POPULATE_DATA_REGEX, `$1${newPopulateDataContent}$3`)
+  } else {
+    console.warn('  [Updater] Could not find PopulateData block via regex. Skipping update.')
+    return content
+  }
+}
