@@ -6,15 +6,17 @@ import { z } from 'zod';
 // Adjust these import paths based on your project structure
 import { createTRPCRouter, protectedProcedure, publicProcedure } from '%%RELATIVE_PATH_TO_TRPC%%';
 import { getMany } from '%%RELATIVE_PATH_TO_UTIL%%'; 
+// Separate value and type imports
 import {
   collections,
   deleteSchema,
   getManySchema,
   getOneSchema,
-  %%PASCAL_CASE_SCHEMA_NAME%%,
   %%PASCAL_CASE_SCHEMA_NAME%%CreateSchema,
   %%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema,
 } from '%%RELATIVE_PATH_TO_DERIVED%%';
+// Import the main schema type using 'import type'
+import type { %%PASCAL_CASE_SCHEMA_NAME%% } from '%%RELATIVE_PATH_TO_DERIVED%%';
 
 export const %%SCHEMA_NAME%%Router = createTRPCRouter({
   getMany: publicProcedure.input(getManySchema).query(async ({ input, ctx }) => {
@@ -30,22 +32,21 @@ export const %%SCHEMA_NAME%%Router = createTRPCRouter({
       .populate(input.populate ?? []) // Make sure populate is handled correctly
       .lean()
       .exec();
-    return res;
+    // Return type might need assertion or checking if findOne can return null
+    return res as %%PASCAL_CASE_SCHEMA_NAME%% | null;
   }),
   create: protectedProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%CreateSchema).mutation(async ({ input, ctx }) => {
     const res = await collections.%%SCHEMA_NAME%%.create(input);
-    return res;
+    // Return type might differ based on Mongoose version/config (e.g., lean object or Mongoose doc)
+    return res.toObject() as %%PASCAL_CASE_SCHEMA_NAME%%; // Example: convert to plain object
   }),
   update: protectedProcedure.input(%%PASCAL_CASE_SCHEMA_NAME%%UpdateSchema.extend({ _id: z.string() })).mutation(async ({ input, ctx }) => {
-    // Note: Update requires _id in input for this structure
     const { _id, ...updateData } = input;
     const res = await collections.%%SCHEMA_NAME%%.findByIdAndUpdate(_id, updateData, { new: true }).lean();
-    // findByIdAndUpdate returns the updated document by default with {new: true}
-    return res;
+    return res as %%PASCAL_CASE_SCHEMA_NAME%% | null;
   }),
   delete: protectedProcedure.input(deleteSchema).mutation(async ({ input, ctx }) => {
     const res = await collections.%%SCHEMA_NAME%%.deleteOne({ _id: input._id }).exec();
-    // deleteOne returns { acknowledged: boolean, deletedCount: number }
     return res;
   }),
 });
