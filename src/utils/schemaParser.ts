@@ -8,9 +8,13 @@ export function parseSchemaNames(schemaContent: string): string[] {
   // Regex to find lines like: export const schemaName = z.object({...})
   // It captures the 'schemaName'
   const regex = /^export\s+const\s+(\w+)\s*=\s*z\.object\(/gm
-  let match
+  let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(schemaContent)) !== null) {
+  while (true) {
+    match = regex.exec(schemaContent);
+    if (match === null) {
+      break;
+    }
     if (match[1]) {
       schemaNames.push(match[1])
     }

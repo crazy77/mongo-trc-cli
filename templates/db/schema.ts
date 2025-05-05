@@ -7,17 +7,17 @@ extendZod(z)
 export const user = z.object({
   _id: zId('User'),
   name: z.string().min(3).max(255),
-  email: z.string().email().optional(), // Added email example
+  email: z.string().email().optional(),
   age: z.number().min(18).max(100).optional(),
   active: z.boolean().default(false),
   access: z.enum(['admin', 'user']).default('user'),
-  // companyId: zId('Company').optional(), // Example relation
-  // wearable: zUUID().optional(),
+  companyId: zId('Company').optional(),
+  wearable: zUUID().optional(),
   address: z
     .object({
       street: z.string().optional(),
       city: z.string().optional(),
-      // state: z.enum(['CA', 'NY', 'TX']).optional(), // Example enum
+      state: z.enum(['CA', 'NY', 'TX']).optional(),
     })
     .optional(),
   tags: z.array(z.string()).optional(),
@@ -28,10 +28,10 @@ export const user = z.object({
 // Example Post Schema
 export const post = z.object({
   _id: zId('Post'),
-  title: z.string(), // Changed from 'name' to 'title'
-  content: z.string().optional(), // Added content field
-  author: zId('User').optional(), // Renamed from 'user' to 'author' for clarity
-  published: z.boolean().default(false).optional(), // Added published field
+  name: z.string(),
+  content: z.string().optional(),
+  user: zId('User').optional(),
+  published: z.boolean().default(false).optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 })
